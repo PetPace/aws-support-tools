@@ -16,11 +16,12 @@ var queueParams = {AttributeNames: ["ApproximateNumberOfMessages"], QueueUrl: qu
 
 
 exports.handler = (event, context, callback) => {
-	var date = (new Date()).toString().split(' ').splice(1, 4).join('-').replace(/:/g, '-');
-	var url = null;
+    //var date = (new Date()).toString().split(' ').splice(1, 4).join('-');
+    var date = (new Date()).toISOString().slice(0,10);
+    var url = null;
 
     function s3upload() {
-        if (prefix == undefined) {
+        if (prefix === undefined) {
             prefix = "";
         }
         var param = {
@@ -78,12 +79,12 @@ exports.handler = (event, context, callback) => {
         console.log("Reading from: " + queueURL);
         sqs.getQueueAttributes(queueParams, (err, data) => {
             if (err) {
-                console.log("Possible issue with SQS permissions or QueueURL wrong")
+                console.log("Possible issue with SQS permissions or QueueURL wrong");
                 callbackQueue(err, null);
-            } 
+            }
             qSize = data.Attributes.ApproximateNumberOfMessages;
-            callbackQueue(null, qSize);
-        });
+        callbackQueue(null, qSize);
+    });
     }
 
     function deleteMessage(message) {
@@ -95,7 +96,7 @@ exports.handler = (event, context, callback) => {
                 console.log(err);
                 throw err;
             }
-            // console.log("Data removed. Response = " + data);  
+            // console.log("Data removed. Response = " + data);
         });
     }
 
@@ -103,117 +104,118 @@ exports.handler = (event, context, callback) => {
     initializeQueue((err, queueSize) => {
         console.log("Reading queue, size = " + queueSize);
 
-        if (queueSize == 0) {
-            callback(null, 'Queue is empty.');
-        }
+    if (queueSize === 0) {
+        callback(null, 'Queue is empty.');
+    }
 
-        var messages = [];
-        var msgBouncePerm = [];
-        var msgSuppres = [];
-        var msgBounceTrans = [];
-        var msgComplaint = [];
+    var messages = [];
+    var msgBouncePerm = [];
+    var msgSuppres = [];
+    var msgBounceTrans = [];
+    var msgComplaint = [];
 
-        for (var i = 0; i < queueSize; i++) {
-            sqs.receiveMessage(queueParams, (err, data) => {
-                if (err) {
-                    console.log(err, err.stack);
-                    throw err;
-                }
+    for (var i = 0; i < queueSize; i++) {
+        sqs.receiveMessage(queueParams, (err, data) => {
+            if (err) {
+                console.log(err, err.stack);
+                throw err;
+            }
 
-                // console.log("data with message = " + data.Messages);
-                if (data.Messages) {
-                    var message = data.Messages[0];
-                    body = JSON.parse(message.Body);
-                    msg = JSON.parse(body.Message);
-                    var destination = msg.mail.destination[0];
-                    var type = msg.notificationType;
-                    var time = msg.mail.timestamp;
-                    var id = msg.mail.messageId;
-                    var otr = "<tr>";
-                    var ftr = "</tr>";
-                    var oline = "<td>";
-                    var cline = "</td>";
-                    var btype = null;
-                    var bsubtype = null;
-                    var diagcode = null;
+            // console.log("data with message = " + data.Messages);
+            if (data.Messages) {
+            var message = data.Messages[0];
+            body = JSON.parse(message.Body);
+            msg = JSON.parse(body.Message);
+            var destination = msg.mail.destination[0];
+            var type = msg.notificationType;
+            var subject = msg.mail.commonHeaders.subject;
+            var time = msg.mail.timestamp;
+            var id = msg.mail.messageId;
+            var otr = "<tr>";
+            var ftr = "</tr>";
+            var oline = "<td>";
+            var cline = "</td>";
+            var btype = null;
+            var bsubtype = null;
+            var diagcode = null;
 
-                    //console.log(msg);
+            //console.log(msg);
 
-                    if (type == "Bounce") {
-                        btype = msg.bounce.bounceType; // Permanent || Transient
-                        bsubtype = msg.bounce.bounceSubType; // General || Supressed
-                        if (btype == "Permanent" && bsubtype == "Suppressed") {
-                            diagcode = "Suppressed by SES";
-                            text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-                            msgSuppres.push(text);
+            if (type == "Bounce") {
+                btype = msg.bounce.bounceType; // Permanent || Transient
+                bsubtype = msg.bounce.bounceSubType; // General || Supressed
+                if (btype == "Permanent" && bsubtype == "Suppressed") {
+                    diagcode = "Suppressed by SES";
+                    text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+                    msgSuppres.push(text);
 
-                        } else if (btype == "Permanent" && bsubtype == "General") {
-                            diagcode = msg.bounce.bouncedRecipients[0].diagnosticCode;
-                            text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-                            msgBouncePerm.push(text);
+                } else if (btype == "Permanent" && bsubtype == "General") {
+                    diagcode = msg.bounce.bouncedRecipients[0].diagnosticCode;
+                    text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+                    msgBouncePerm.push(text);
 
-                        } else if (btype == "Permanent" && bsubtype == "NoEmail") {
-                            diagcode = msg.bounce.bouncedRecipients[0].diagnosticCode;
-                            text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-                            msgBouncePerm.push(text);
+                } else if (btype == "Permanent" && bsubtype == "NoEmail") {
+                    diagcode = msg.bounce.bouncedRecipients[0].diagnosticCode;
+                    text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+                    msgBouncePerm.push(text);
 
-                        } else if (btype == "Undetermined") {
-                            diagcode = msg.bounce.bouncedRecipients[0].diagnosticCode;
-                            text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-                            msgBouncePerm.push(text);
+                } else if (btype == "Undetermined") {
+                    diagcode = msg.bounce.bouncedRecipients[0].diagnosticCode;
+                    text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+                    msgBouncePerm.push(text);
 
-                        } else if (btype == "Transient") {
-                            diagcode = "soft-Bounce";
-                            text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-                            msgBounceTrans.push(text);
+                } else if (btype == "Transient") {
+                    diagcode = "soft-Bounce";
+                    text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+                    msgBounceTrans.push(text);
 
-                        } else {
-                            console.log("it's an unknown bounce");
-                            diagcode = "unknown";
-                            text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-                            msgBouncePerm.push(text);
-                        }
-
-                    } else if (type == "Delivery") {
-                        console.log("Delivery notification not supported");
-
-                    } else if (type == "Complaint") {
-                        btype = "null";
-                        bsubtype = "null";
-                        diagcode = "null";
-                        text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
-
-                        msgComplaint.push(text);
-
-                    }
-                    
-                    else {
-                        console.log("not identified");
-                    }
-
-                    messages.push(i);
-
-                    deleteMessage(message);
-                    //console.log("Array size = " + messages.length + " with queue size = " + queueSize);
-
-                    if (messages.length == queueSize) {
-
-                        var bp = msgBouncePerm.join('');
-                        var sp = msgSuppres.join('');
-                        var bt = msgBounceTrans.join('');
-                        var cp = msgComplaint.join('');
-                        var begin = fs.readFileSync('template/begin.html', 'utf8');
-                        var middle = bp + sp + bt + cp;
-                        var end = fs.readFileSync('template/end.html', 'utf8');
-                        content = begin + middle + end;
-
-                        s3upload();
-
-                    }
                 } else {
-                    console.log("data without messages.");
+                    console.log("it's an unknown bounce");
+                    diagcode = "unknown";
+                    text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+                    msgBouncePerm.push(text);
                 }
-            });
+
+            } else if (type == "Delivery") {
+                console.log("Delivery notification not supported");
+
+            } else if (type == "Complaint") {
+                btype = "null";
+                bsubtype = "null";
+                diagcode = "null";
+                text = otr + oline + type + cline + oline + btype + cline + oline + bsubtype + cline + oline + destination + cline + oline + subject + cline + oline + diagcode + cline + oline + time + cline + oline + id + cline + ftr;
+
+                msgComplaint.push(text);
+
+            }
+
+            else {
+                console.log("not identified");
+            }
+
+            messages.push(i);
+
+            deleteMessage(message);
+            //console.log("Array size = " + messages.length + " with queue size = " + queueSize);
+
+            if (messages.length == queueSize) {
+
+                var bp = msgBouncePerm.join('');
+                var sp = msgSuppres.join('');
+                var bt = msgBounceTrans.join('');
+                var cp = msgComplaint.join('');
+                var begin = fs.readFileSync('template/begin.html', 'utf8');
+                var middle = bp + sp + bt + cp;
+                var end = fs.readFileSync('template/end.html', 'utf8');
+                content = begin + middle + end;
+
+                s3upload();
+
+            }
+        } else {
+            console.log("data without messages.");
         }
     });
+    }
+});
 };
